@@ -1380,6 +1380,7 @@ int enable_snd_device(struct audio_device *adev,
          audio_extn_spkr_prot_calib_cancel(adev);
 
     audio_extn_dsm_feedback_enable(adev, snd_device, true);
+    amplifier_enable_devices(snd_device, true);
 
     if (platform_can_enable_spkr_prot_on_device(snd_device) &&
          audio_extn_spkr_prot_is_enabled()) {
@@ -1414,6 +1415,20 @@ int enable_snd_device(struct audio_device *adev,
         }
 
         if (SND_DEVICE_OUT_BT_A2DP == snd_device) {
+
+            struct audio_usecase *usecase;
+            struct listnode *node;
+            /* Disable SCO Devices and enable handset mic for active input stream */
+            list_for_each(node, &adev->usecase_list) {
+                usecase = node_to_item(node, struct audio_usecase, list);
+                if (usecase->stream.in && (usecase->type == PCM_CAPTURE) &&
+                    is_sco_in_device_type(&usecase->stream.in->device_list)) {
+                    ALOGD("a2dp resumed, switch bt sco mic to handset mic");
+                    reassign_device_list(&usecase->stream.in->device_list,
+                                         AUDIO_DEVICE_IN_BUILTIN_MIC, "");
+                    select_devices(adev, usecase->id);
+                }
+            }
             if (audio_extn_a2dp_start_playback() < 0) {
                 ALOGE(" fail to configure A2dp Source control path ");
                 goto err;
@@ -1507,6 +1522,7 @@ int disable_snd_device(struct audio_device *adev,
         ALOGD("%s: snd_device(%d: %s)", __func__, snd_device, device_name);
 
         audio_extn_dsm_feedback_enable(adev, snd_device, false);
+        amplifier_enable_devices(snd_device, false);
 
         if (platform_can_enable_spkr_prot_on_device(snd_device) &&
              audio_extn_spkr_prot_is_enabled()) {
@@ -1653,6 +1669,7 @@ static snd_device_t derive_playback_snd_device(void * platform,
 
     snd_device_t d1 = uc->out_snd_device;
     snd_device_t d2 = new_snd_device;
+    snd_device_t ret = 0;
 
     list_init(&a1);
     list_init(&a2);
@@ -1683,33 +1700,46 @@ static snd_device_t derive_playback_snd_device(void * platform,
                       __func__,
                       list_length(&a1) > 1 ? d1 : d2);
             }
+            ret = d2;
             goto end;
         }
 
         if (platform_check_backends_match(d3[0], d3[1])) {
-            return d2; // case 5
+            ret = d2;
+            goto end; // case 5
         } else {
             if ((list_length(&a1) > 1) && (list_length(&a2) > 1) &&
-                 platform_check_backends_match(d1, d2))
-                return d2; //case 9
-            if (list_length(&a1) > 1)
-                return d1; //case 7
+                 platform_check_backends_match(d1, d2)) {
+                    ret = d2;
+                    goto end; //case 9
+                 }
+            if (list_length(&a1) > 1) {
+                ret = d1;
+                goto end; //case 7
+            }
             // check if d1 is related to any of d3's
-            if (d1 == d3[0] || d1 == d3[1])
-                return d1; // case 1
-            else
-                return d3[1]; // case 8
+            if (d1 == d3[0] || d1 == d3[1]) {
+                ret = d1;
+                goto end; // case 1
+            } else {
+                 ret = d3[1];
+                goto end; // case 8
+            }
         }
     } else {
         if (platform_check_backends_match(d1, d2)) {
-            return d2; // case 2, 4
+           ret = d2;
+           goto end; // case 2, 4
         } else {
-            return d1; // case 6, 3
+            ret = d1;
+            goto end; // case 6, 3
         }
     }
 
 end:
-    return d2; // return whatever was calculated before.
+    clear_devices(&a1);
+    clear_devices(&a2);
+    return ret; // return whatever was calculated before.
 }
 
 static void check_usecases_codec_backend(struct audio_device *adev,
@@ -1956,7 +1986,7 @@ static void check_usecases_capture_codec_backend(struct audio_device *adev,
                 ((uc_info->type == VOICE_CALL &&
                  is_single_device_type_equal(&usecase->device_list,
                                             AUDIO_DEVICE_IN_VOICE_CALL)) ||
-                 platform_check_backends_match(snd_device,\
+                 platform_check_all_backends_match(snd_device,\
                                               usecase->in_snd_device))) &&
                 (usecase->id != USECASE_AUDIO_SPKR_CALIB_TX)) {
             ALOGD("%s: Usecase (%s) is active on (%s) - disabling ..",
@@ -8806,25 +8836,6 @@ static int adev_set_parameters(struct audio_hw_device *dev, const char *kvpairs)
          else {
             adev->bt_sco_on = false;
             audio_extn_sco_reset_configuration();
-        }
-    }
-
-    ret = str_parms_get_str(parms, "A2dpSuspended", value, sizeof(value));
-    if (ret >= 0) {
-        if (!strncmp(value, "false", 5) &&
-            audio_extn_a2dp_source_is_suspended()) {
-            struct audio_usecase *usecase;
-            struct listnode *node;
-            list_for_each(node, &adev->usecase_list) {
-                usecase = node_to_item(node, struct audio_usecase, list);
-                if (usecase->stream.in && (usecase->type == PCM_CAPTURE) &&
-                    is_sco_in_device_type(&usecase->stream.in->device_list)) {
-                    ALOGD("a2dp resumed, switch bt sco mic to handset mic");
-                    reassign_device_list(&usecase->stream.in->device_list,
-                                         AUDIO_DEVICE_IN_BUILTIN_MIC, "");
-                    select_devices(adev, usecase->id);
-                }
-            }
         }
     }
 

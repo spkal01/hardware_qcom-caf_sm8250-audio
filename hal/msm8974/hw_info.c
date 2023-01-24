@@ -1,6 +1,12 @@
 /*
  * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -558,6 +564,14 @@ static void update_hardware_info_kona(
                  sizeof("kona-qrd-snd-card"))) {
         strlcpy(hw_info->name, "kona", sizeof(hw_info->name));
         hw_info->is_stereo_spkr = false;
+    } else if (!strncmp(snd_card_name, "kona-xrfusion-ult-snd-card",
+                 sizeof("kona-xrfusion-ult-snd-card"))) {
+        strlcpy(hw_info->name, "kona", sizeof(hw_info->name));
+        hw_info->is_stereo_spkr = true;
+    } else if (!strncmp(snd_card_name, "kona-xrfusionult-snd-card",
+                 sizeof("kona-xrfusionult-snd-card"))) {
+        strlcpy(hw_info->name, "kona", sizeof(hw_info->name));
+        hw_info->is_stereo_spkr = true;
     } else if (!strncmp(snd_card_name, "lito-qrd-snd-card",
                  sizeof("lito-qrd-snd-card"))) {
         strlcpy(hw_info->name, "lito", sizeof(hw_info->name));
@@ -786,6 +800,9 @@ static void update_hardware_info_bear(struct hardware_info *hw_info, const char 
     } else if (!strncmp(snd_card_name, "trinket-tashalite-snd-card",
                  sizeof("trinket-tashalite-snd-card"))) {
         strlcpy(hw_info->name, "trinket", sizeof(hw_info->name));
+    } else if (!strncmp(snd_card_name, "trinket-facepay-tashalite-snd-card",
+                 sizeof("trinket-facepay-tashalite-snd-card"))) {
+        strlcpy(hw_info->name, "trinket", sizeof(hw_info->name));
     } else if (!strncmp(snd_card_name, "trinket-tasha-snd-card",
                  sizeof("trinket-tasha-snd-card"))) {
         strlcpy(hw_info->name, "trinket", sizeof(hw_info->name));
@@ -963,7 +980,7 @@ void hw_info_deinit(void *hw_info)
 {
     struct hardware_info *my_data = (struct hardware_info*) hw_info;
 
-    if(!my_data)
+    if (my_data)
         free(my_data);
 }
 
